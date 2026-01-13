@@ -1,56 +1,108 @@
 services:
   api:
     build: ./app
+    container_name: scout_api
     ports:
       - "8000:8000"
+    volumes:
+      - ./app/players.csv:/app/players.csv:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/players/ids"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:15
+    container_name: scout_postgres
     environment:
       POSTGRES_USER: scout
       POSTGRES_PASSWORD: scout
       POSTGRES_DB: scout
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scout -d scout"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+
+  airflow-db:
+    image: postgres:15
+    container_name: scout_airflow_db
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
 
   airflow:
     build: ./airflow
+    container_name: scout_airflow
     depends_on:
-      - postgres
-      - api
+      postgres:
+        condition: service_healthy
+      airflow-db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://scout:scout@postgres:5432/scout
+      # Airflow database connection
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-
-      # so the DAG can call the API inside docker network:
+      AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY:-}
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      # Scout pipeline configuration
       SCOUT_API_BASE_URL: http://api:8000
-
-      # so the DAG can write to Postgres:
       SCOUT_PG_HOST: postgres
       SCOUT_PG_DB: scout
       SCOUT_PG_USER: scout
       SCOUT_PG_PASSWORD: scout
+      SCOUT_MIN_SECONDS_BETWEEN_CALLS: "0.65"
+      SCOUT_MAX_RETRIES: "6"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./sql:/opt/airflow/sql
+      - airflow_logs:/opt/airflow/logs
     ports:
       - "8080:8080"
     command: >
       bash -c "
-      airflow db init &&
-      airflow users create
-        --username admin
-        --password admin
-        --firstname admin
-        --lastname admin
-        --role Admin
-        --email admin@example.com || true &&
+      if [ ! -f /opt/airflow/airflow.db.initialized ]; then
+        echo 'Initializing Airflow database...'
+        airflow db init
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin || true
+        touch /opt/airflow/airflow.db.initialized
+      fi &&
+      echo 'Starting Airflow services...' &&
       airflow webserver & airflow scheduler
       "
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   pgdata:
+  airflow_db_data:
+  airflow_logs:
