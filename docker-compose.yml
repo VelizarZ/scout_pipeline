@@ -1,0 +1,56 @@
+services:
+  api:
+    build: ./app
+    ports:
+      - "8000:8000"
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: scout
+      POSTGRES_PASSWORD: scout
+      POSTGRES_DB: scout
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  airflow:
+    build: ./airflow
+    depends_on:
+      - postgres
+      - api
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://scout:scout@postgres:5432/scout
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+
+      # so the DAG can call the API inside docker network:
+      SCOUT_API_BASE_URL: http://api:8000
+
+      # so the DAG can write to Postgres:
+      SCOUT_PG_HOST: postgres
+      SCOUT_PG_DB: scout
+      SCOUT_PG_USER: scout
+      SCOUT_PG_PASSWORD: scout
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./sql:/opt/airflow/sql
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+      airflow db init &&
+      airflow users create
+        --username admin
+        --password admin
+        --firstname admin
+        --lastname admin
+        --role Admin
+        --email admin@example.com || true &&
+      airflow webserver & airflow scheduler
+      "
+
+volumes:
+  pgdata:
