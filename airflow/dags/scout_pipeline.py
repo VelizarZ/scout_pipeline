@@ -221,28 +221,9 @@ with DAG(
                 error_count += 1
                 print(f"Error loading player {player.get('id')}: {e}")
 
-        agents_loaded = 0
-        for player in transformed_players:
-            if player.get("agent_id") and player.get("agent"):
-                try:
-                    hook.run(
-                        """
-                        INSERT INTO agents (agent_id, agent_name, updated_at)
-                        VALUES (%(agent_id)s, %(agent_name)s, %(updated_at)s)
-                        ON CONFLICT (agent_id)
-                        DO UPDATE SET agent_name = EXCLUDED.agent_name, updated_at = EXCLUDED.updated_at
-                        """,
-                        parameters={
-                            "agent_id": player["agent_id"],
-                            "agent_name": player["agent"],
-                            "updated_at": now,
-                        },
-                    )
-                    agents_loaded += 1
-                except Exception:
-                    pass
 
-        return {"loaded": loaded_count, "errors": error_count, "agents_loaded": agents_loaded}
+
+        return {"loaded": loaded_count, "errors": error_count}
 
     @task
     def log_pipeline_run(load_result: Dict, extraction_results: List[Dict]) -> None:
