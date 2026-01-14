@@ -49,7 +49,6 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
-    # Connection used by the scout pipeline to write data
     AIRFLOW_CONN_SCOUT_DB: postgresql://airflow:airflow@postgres:5432/scout
   volumes:
     - ./airflow/dags:/opt/airflow/dags

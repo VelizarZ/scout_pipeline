@@ -10,7 +10,7 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils import timezone
-
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 API_BASE = os.getenv("SCOUT_API_BASE_URL", "http://api:8000")
 MIN_SECONDS_BETWEEN_CALLS = float(os.getenv("SCOUT_MIN_SECONDS_BETWEEN_CALLS", "0.65"))
 MAX_RETRIES = int(os.getenv("SCOUT_MAX_RETRIES", "6"))
@@ -152,7 +152,7 @@ with DAG(
             print("No players to load")
             return
 
-        from airflow.providers.postgres.hooks.postgres import PostgresHook
+
         hook = PostgresHook(postgres_conn_id="scout_db")
         loaded_count = 0
         error_count = 0
