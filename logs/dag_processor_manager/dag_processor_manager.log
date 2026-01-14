@@ -1,0 +1,20 @@
+[2026-01-14T00:38:41.281+0000] {manager.py:483} INFO - Processing files using up to 2 processes at a time 
+[2026-01-14T00:38:41.281+0000] {manager.py:484} INFO - Process each file at most once every 10 seconds
+[2026-01-14T00:38:41.282+0000] {manager.py:485} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-01-14T00:38:41.282+0000] {manager.py:821} INFO - Searching for files in /opt/airflow/dags
+[2026-01-14T00:38:41.283+0000] {manager.py:824} INFO - There are 0 files in /opt/airflow/dags
+[2026-01-14T00:43:41.759+0000] {manager.py:821} INFO - Searching for files in /opt/airflow/dags
+[2026-01-14T00:43:41.762+0000] {manager.py:824} INFO - There are 0 files in /opt/airflow/dags
+[2026-01-14T00:46:33.849+0000] {manager.py:465} INFO - Exiting gracefully upon receiving signal 15
+[2026-01-14T00:47:25.794+0000] {manager.py:483} INFO - Processing files using up to 2 processes at a time 
+[2026-01-14T00:47:25.795+0000] {manager.py:484} INFO - Process each file at most once every 10 seconds
+[2026-01-14T00:47:25.795+0000] {manager.py:485} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-01-14T00:47:25.795+0000] {manager.py:821} INFO - Searching for files in /opt/airflow/dags
+[2026-01-14T00:47:25.796+0000] {manager.py:824} INFO - There are 0 files in /opt/airflow/dags
+[2026-01-14T00:47:59.708+0000] {manager.py:465} INFO - Exiting gracefully upon receiving signal 15
+[2026-01-14T00:48:16.448+0000] {manager.py:483} INFO - Processing files using up to 2 processes at a time 
+[2026-01-14T00:48:16.448+0000] {manager.py:484} INFO - Process each file at most once every 10 seconds
+[2026-01-14T00:48:16.449+0000] {manager.py:485} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-01-14T00:48:16.449+0000] {manager.py:821} INFO - Searching for files in /opt/airflow/dags
+[2026-01-14T00:48:16.450+0000] {manager.py:824} INFO - There are 0 files in /opt/airflow/dags
+[2026-01-14T00:49:35.025+0000] {manager.py:465} INFO - Exiting gracefully upon receiving signal 15

@@ -1,8 +1,10 @@
-FROM apache/airflow:2.8.0
+FROM apache/airflow:2.10.0-python3.11
 
-USER root
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
-USER airflow
+# Copy and install your project requirements
 COPY requirements.txt /requirements.txt
 RUN pip install --no-cache-dir -r /requirements.txt
+
+# Copy application code (optional - can also mount as volume)
+# COPY app /opt/airflow/app
+
+USER airflow
