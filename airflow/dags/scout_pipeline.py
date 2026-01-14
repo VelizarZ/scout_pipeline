@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 from dateutil import parser
 from airflow import DAG
 from airflow.decorators import task
-from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.utils import timezone
 
 API_BASE = os.getenv("SCOUT_API_BASE_URL", "http://api:8000")
@@ -20,11 +20,6 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
     "execution_timeout": timedelta(hours=4),
 }
-
-def get_db_hook() -> PostgresHook:
-    # Expect an Airflow connection named "scout_db"
-    # e.g. set AIRFLOW_CONN_SCOUT_DB=postgresql://scout:scout@postgres:5432/scout
-    return PostgresHook(postgres_conn_id="scout_db")
 
 
 def clean_string(value: Optional[str]) -> Optional[str]:
@@ -81,34 +76,12 @@ with DAG(
     tags=["scout", "data-extraction"],
     max_active_runs=1,
     default_args=default_args,
+    template_searchpath=["/opt/airflow/sql"],
 ) as dag:
 
     @task
-    def initialize_database():
-        hook = get_db_hook()
-        schema_path = "/opt/airflow/sql/schema.sql"
-
-        try:
-            with open(schema_path, "r") as f:
-                schema_sql = f.read()
-
-            # naive splitting is ok for simple schema.sql; keep it for take-home
-            for stmt in schema_sql.split(";"):
-                stmt = stmt.strip()
-                if stmt:
-                    try:
-                        hook.run(stmt)
-                    except Exception as e:
-                        # ignore "already exists" style errors
-                        msg = str(e).lower()
-                        if "already exists" not in msg and "duplicate" not in msg:
-                            raise
-            print("Database schema initialized successfully")
-        except Exception as e:
-            print(f"Schema initialization note: {e}")
-
-    @task
     def get_player_ids() -> List[int]:
+        """Fetch all player IDs from the API."""
         url = f"{API_BASE}/players/ids"
         r = requests.get(url, timeout=30)
         r.raise_for_status()
@@ -117,11 +90,9 @@ with DAG(
         print(f"Found {len(ids)} player IDs to process")
         return [int(x) for x in ids]
 
-    # IMPORTANT:
-    # Use an Airflow Pool (e.g., create pool "api_pool" with 1 slot)
-    # to ensure we do not exceed 100 req/min with dynamic mapping.
     @task(pool="api_pool")
     def extract_single_player(player_id: int) -> Dict:
+        """Extract data for a single player with rate limiting and retries."""
         session = requests.Session()
         url = f"{API_BASE}/player/{player_id}"
 
@@ -151,6 +122,7 @@ with DAG(
 
     @task
     def transform_players(results: List[Dict]) -> List[Dict]:
+        """Clean and transform player data."""
         transformed = []
         for result in results:
             if not result.get("success"):
@@ -168,27 +140,22 @@ with DAG(
                 "contract_expiry": parse_date(player_data.get("contract_expiry")),
             }
 
-            issues = []
-            if not p["first_name"]:
-                issues.append("missing_first_name")
-            if not p["last_name"]:
-                issues.append("missing_last_name")
-
-            p["_data_quality_issues"] = issues
             transformed.append(p)
 
         print(f"Transformed {len(transformed)} players successfully")
         return transformed
 
     @task
-    def load_players(transformed_players: List[Dict]) -> Dict:
+    def load_players(transformed_players: List[Dict]) -> None:
+        """Load players into the database."""
         if not transformed_players:
-            return {"loaded": 0, "errors": 0, "agents_loaded": 0}
+            print("No players to load")
+            return
 
-        hook = get_db_hook()
+        from airflow.providers.postgres.hooks.postgres import PostgresHook
+        hook = PostgresHook(postgres_conn_id="scout_db")
         loaded_count = 0
         error_count = 0
-
         now = timezone.utcnow()
 
         for player in transformed_players:
@@ -221,69 +188,15 @@ with DAG(
                 error_count += 1
                 print(f"Error loading player {player.get('id')}: {e}")
 
+        print(f"Load complete: {loaded_count} successful, {error_count} errors")
 
 
-        return {"loaded": loaded_count, "errors": error_count}
 
-    @task
-    def log_pipeline_run(load_result: Dict, extraction_results: List[Dict]) -> None:
-        successful = [r for r in extraction_results if r.get("success")]
-        failed = [r for r in extraction_results if not r.get("success")]
-
-        try:
-            hook = get_db_hook()
-            hook.run(
-                """
-                INSERT INTO pipeline_runs (
-                    execution_date, status, players_extracted,
-                    players_loaded, players_failed, completed_at
-                )
-                VALUES (
-                    %(execution_date)s, %(status)s, %(extracted)s,
-                    %(loaded)s, %(failed)s, %(completed_at)s
-                )
-                """,
-                parameters={
-                    "execution_date": timezone.utcnow(),
-                    "status": "success" if load_result.get("errors", 0) == 0 else "partial",
-                    "extracted": len(successful),
-                    "loaded": load_result.get("loaded", 0),
-                    "failed": len(failed),
-                    "completed_at": timezone.utcnow(),
-                },
-            )
-        except Exception as e:
-            print(f"Warning: Could not log pipeline run: {e}")
-
-    @task
-    def generate_report(results: List[Dict], load_result: Dict) -> None:
-        successful = [r for r in results if r.get("success")]
-        failed = [r for r in results if not r.get("success")]
-
-        print("=" * 60)
-        print("EXTRACTION REPORT")
-        print("=" * 60)
-        print(f"Total players processed: {len(results)}")
-        print(f"Successfully extracted: {len(successful)}")
-        print(f"Failed extractions: {len(failed)}")
-        print(f"Loaded to database: {load_result.get('loaded', 0)}")
-        print(f"Load errors: {load_result.get('errors', 0)}")
-        if failed:
-            print(f"Sample failed IDs: {[r['player_id'] for r in failed[:10]]}")
-        print("=" * 60)
-
-        if results and (len(failed) / len(results)) > 0.05:
-            print(f"WARNING: High failure rate - {len(failed)}/{len(results)} failed")
-
-    # Build the graph ONCE (no duplicate task creation)
-    init_db = initialize_database()
+    # Main pipeline flow
     ids = get_player_ids()
     results = extract_single_player.expand(player_id=ids)
     transformed = transform_players(results)
     load_result = load_players(transformed)
 
-    log_task = log_pipeline_run(load_result, results)
-    report_task = generate_report(results, load_result)
-
-    init_db >> ids >> results >> transformed >> load_result
-    load_result >> [log_task, report_task]
+    # Set task dependencies
+    ids >> results >> transformed >> load_result
