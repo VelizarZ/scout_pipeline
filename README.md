@@ -20,7 +20,7 @@ Stores the main player information.
 | `updated_at` | TIMESTAMP | Last update timestamp | Auto-updated on each run |
 
 
-
+Run the application inside the root folder with
 ```console
 docker-compose up --build
 ```
@@ -30,6 +30,7 @@ localhost:8080
 ```
 with username: `airflow`
 and password: `airflow`  
+After logging, you have to set up the api_pool from Admin/Pools with a 100 Slots.
 
 A tool like DBeaver can be used to quickly connect to the PostgreSQL instance and check the players table before and after the ingestions.
 The DB instance is at 
