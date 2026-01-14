@@ -22,7 +22,7 @@ Stores the main player information.
 
 Run the application inside the root folder with
 ```console
-docker-compose up --build
+docker compose up --build
 ```
 After Airflow webserver is running, open Airflow in your local browser and go to:
 ```
@@ -36,4 +36,8 @@ A tool like DBeaver can be used to quickly connect to the PostgreSQL instance an
 The DB instance is at 
 ```
 localhost:5432
+```
+The following command gracefully will terminate the the docker network and remove all of the volumes. It is important to it that way since the scout DB and player table are created on start of a new docker cluster.
+```console
+docker compose down -v
 ```
